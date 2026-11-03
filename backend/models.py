@@ -3,8 +3,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 from datetime import datetime, timezone
 
+
 class Task(Base):
-    __tablename__ = 'tasks'
+    __tablename__ = "tasks"
     __table_args__ = (
         CheckConstraint("priority BETWEEN 1 AND 4", name="ck_tasks_priority_range"),
     )
@@ -12,12 +13,12 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(String(1000))
-    priority: Mapped[int] = mapped_column(default=2, server_default='2')
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    priority: Mapped[int] = mapped_column(default=2, server_default="2")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
 
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     login: Mapped[str] = mapped_column(String(50), unique=True)
@@ -25,9 +26,9 @@ class User(Base):
 
 
 class RefreshToken(Base):
-    __tablename__ = 'refresh_tokens'
+    __tablename__ = "refresh_tokens"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
