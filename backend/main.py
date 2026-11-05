@@ -1,15 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Path
 from sqlalchemy.exc import IntegrityError
-from .schemas import UserOut, UserCreate, Token, RefreshRequest
+from .schemas import UserOut, UserCreate, Token, RefreshRequest, TaskCreate, TaskRead
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
-from .models import User, RefreshToken
+from .models import User, RefreshToken, Task
 from .security import (
     get_password_hash,
     authenticate_user,
     generate_refresh_token,
     create_access_token,
     hash_refresh_token,
+    get_current_user_id,
 )
 import asyncio
 from typing import Annotated
@@ -97,4 +98,86 @@ async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_sessi
             RefreshToken.token_hash == hash_refresh_token(body.refresh_token)
         )
     )
+    await session.commit()
+
+
+@app.post("/tasks", response_model=TaskRead, status_code=201)
+async def create_task(
+    task_in: TaskCreate,
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    task = Task(
+        title=task_in.title,
+        description=task_in.description,
+        priority=task_in.priority,
+        user_id=current_id,
+    )
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+@app.get("/tasks", response_model=list[TaskRead])
+async def get_tasks(
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    result = await session.execute(select(Task).where(Task.user_id == current_id))
+    return result.scalars().all()
+
+
+@app.get("/tasks/{task_id}", response_model=TaskRead)
+async def get_task(
+    task_id: Annotated[int, Path(ge=1)],
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    task = await session.scalar(
+        select(Task).where(Task.user_id == current_id, Task.id == task_id)
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
+        )
+    return task
+
+
+@app.put("/tasks/{task_id}", response_model=TaskRead)
+async def edit_task(
+    task_id: Annotated[int, Path(ge=1)],
+    task_in: TaskCreate,
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    task = await session.scalar(
+        select(Task).where(Task.user_id == current_id, Task.id == task_id)
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
+        )
+    task.title = task_in.title
+    task.description = task_in.description
+    task.priority = task_in.priority
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+async def delete_task(
+    task_id: Annotated[int, Path(ge=1)],
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    task = await session.scalar(
+        select(Task).where(Task.user_id == current_id, Task.id == task_id)
+    )
+    if task is None:
+        raise HTTPException(
+            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
+        )
+    await session.delete(task)
     await session.commit()

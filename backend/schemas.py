@@ -2,9 +2,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: str
-    priority: int = 2
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=1000)
+    priority: int = Field(default=2, ge=1, le=4)
 
 
 class TaskRead(TaskCreate):
