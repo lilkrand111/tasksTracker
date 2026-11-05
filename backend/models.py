@@ -1,7 +1,7 @@
 from sqlalchemy import String, ForeignKey, CheckConstraint, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 class Task(Base):
@@ -12,9 +12,12 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
-    description: Mapped[str] = mapped_column(String(1000))
+    description: Mapped[str | None] = mapped_column(String(1000))
     priority: Mapped[int] = mapped_column(default=2, server_default="2")
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE")
+    )
 
 
 class User(Base):
@@ -32,3 +35,12 @@ class RefreshToken(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(1000))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
