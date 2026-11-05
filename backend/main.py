@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Path
+from fastapi import FastAPI, Depends, HTTPException, status, Path, Query
 from sqlalchemy.exc import IntegrityError
 from .schemas import UserOut, UserCreate, Token, RefreshRequest, TaskCreate, TaskRead
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,8 +123,18 @@ async def create_task(
 async def get_tasks(
     session: AsyncSession = Depends(get_session),
     current_id: int = Depends(get_current_user_id),
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    priority: Annotated[int | None, Query(ge=1, le=4)] = None,
+    search: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
 ):
-    result = await session.execute(select(Task).where(Task.user_id == current_id))
+    stmt = select(Task).where(Task.user_id == current_id)
+    if priority is not None:
+        stmt = stmt.where(Task.priority == priority)
+    if search is not None:
+        stmt = stmt.where(Task.title.icontains(search, autoescape=True))
+    stmt = stmt.order_by(Task.id).limit(limit).offset(offset)
+    result = await session.execute(stmt)
     return result.scalars().all()
 
 
