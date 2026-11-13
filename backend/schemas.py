@@ -33,3 +33,14 @@ class Token(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class ProjectRead(ProjectCreate):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)

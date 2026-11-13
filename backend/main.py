@@ -1,9 +1,18 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Path, Query
 from sqlalchemy.exc import IntegrityError
-from .schemas import UserOut, UserCreate, Token, RefreshRequest, TaskCreate, TaskRead
+from .schemas import (
+    UserOut,
+    UserCreate,
+    Token,
+    RefreshRequest,
+    TaskCreate,
+    TaskRead,
+    ProjectCreate,
+    ProjectRead,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_session
-from .models import User, RefreshToken, Task
+from .models import User, RefreshToken, Task, Project
 from .security import (
     get_password_hash,
     authenticate_user,
@@ -19,6 +28,26 @@ from sqlalchemy import select, delete
 from datetime import datetime, timezone
 
 app = FastAPI()
+
+
+async def get_owned_task(session: AsyncSession, task_id: int, user_id: int) -> Task:
+    task = await session.scalar(
+        select(Task).where(Task.user_id == user_id, Task.id == task_id)
+    )
+    if task is None:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    return task
+
+
+async def get_owned_project(
+    session: AsyncSession, project_id: int, user_id: int
+) -> Project:
+    project = await session.scalar(
+        select(Project).where(Project.user_id == user_id, Project.id == project_id)
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    return project
 
 
 @app.get("/health")
@@ -144,13 +173,7 @@ async def get_task(
     session: AsyncSession = Depends(get_session),
     current_id: int = Depends(get_current_user_id),
 ):
-    task = await session.scalar(
-        select(Task).where(Task.user_id == current_id, Task.id == task_id)
-    )
-    if task is None:
-        raise HTTPException(
-            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
-        )
+    task = await get_owned_task(session, task_id, current_id)
     return task
 
 
@@ -161,13 +184,7 @@ async def edit_task(
     session: AsyncSession = Depends(get_session),
     current_id: int = Depends(get_current_user_id),
 ):
-    task = await session.scalar(
-        select(Task).where(Task.user_id == current_id, Task.id == task_id)
-    )
-    if task is None:
-        raise HTTPException(
-            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
-        )
+    task = await get_owned_task(session, task_id, current_id)
     task.title = task_in.title
     task.description = task_in.description
     task.priority = task_in.priority
@@ -182,12 +199,73 @@ async def delete_task(
     session: AsyncSession = Depends(get_session),
     current_id: int = Depends(get_current_user_id),
 ):
-    task = await session.scalar(
-        select(Task).where(Task.user_id == current_id, Task.id == task_id)
-    )
-    if task is None:
-        raise HTTPException(
-            status_code=404, detail=f"Задача с {task_id} ID не найдена!"
-        )
+    task = await get_owned_task(session, task_id, current_id)
     await session.delete(task)
+    await session.commit()
+
+
+@app.post("/projects", response_model=ProjectRead, status_code=201)
+async def create_project(
+    project_in: ProjectCreate,
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    project = Project(
+        name=project_in.name, description=project_in.description, user_id=current_id
+    )
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+@app.get("/projects", response_model=list[ProjectRead])
+async def get_projects(
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    search: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+):
+    stmt = select(Project).where(Project.user_id == current_id)
+    if search is not None:
+        stmt = stmt.where(Project.name.icontains(search, autoescape=True))
+    stmt = stmt.order_by(Project.id).limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+@app.get("/projects/{project_id}", response_model=ProjectRead)
+async def get_project(
+    project_id: Annotated[int, Path(ge=1)],
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    project = await get_owned_project(session, project_id, current_id)
+    return project
+
+
+@app.put("/projects/{project_id}", response_model=ProjectRead)
+async def edit_project(
+    project_id: Annotated[int, Path(ge=1)],
+    project_in: ProjectCreate,
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    project = await get_owned_project(session, project_id, current_id)
+    project.name = project_in.name
+    project.description = project_in.description
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+@app.delete("/projects/{project_id}", status_code=204)
+async def delete_project(
+    project_id: Annotated[int, Path(ge=1)],
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    project = await get_owned_project(session, project_id, current_id)
+    await session.delete(project)
     await session.commit()
