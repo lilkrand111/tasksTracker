@@ -18,6 +18,7 @@ class Task(Base):
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE")
     )
+    is_done: Mapped[bool] = mapped_column(default=False, server_default="0")
 
 
 class User(Base):

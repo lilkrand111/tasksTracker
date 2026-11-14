@@ -9,6 +9,17 @@ const PRIORITIES = [
 const priorityLabel = (v) => PRIORITIES.find((p) => p.value === v)?.label ?? v;
 const PAGE_SIZE = 20;
 
+// query — значение параметра is_done для API (undefined — без фильтра).
+const STATUSES = [
+  { value: "active", label: "Активные", query: false },
+  { value: "done", label: "Выполненные", query: true },
+  { value: "all", label: "Все", query: undefined },
+];
+const statusQuery = () => STATUSES.find((s) => s.value === state.status)?.query;
+// Задача больше не подходит под выбранный статус (её только что отметили) — скоро уйдёт из списка.
+const isLeaving = (t) =>
+  (state.status === "active" && t.is_done) || (state.status === "done" && !t.is_done);
+
 const $app = document.getElementById("app");
 const $modal = document.getElementById("modal");
 const $toasts = document.getElementById("toasts");
@@ -20,9 +31,11 @@ const state = {
   tasks: [],
   hasMore: false,
   loading: false,
+  quiet: false, // фоновая перезагрузка — список не затемняем
   error: null,
   search: "",
   priority: "",
+  status: "active",
 };
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -155,6 +168,12 @@ function renderShell() {
             </select>
             <button class="btn primary" data-action="new-task" title="Новая задача (N)">${icons.plus}<span>Задача</span></button>
           </div>
+          <div class="status-tabs" id="status-tabs" role="group" aria-label="Статус задач">
+            ${STATUSES.map(
+              (s) => `<button class="tab" data-action="set-status" data-status="${s.value}"
+                        aria-pressed="${s.value === state.status}">${s.label}</button>`,
+            ).join("")}
+          </div>
           <ul class="task-list" id="task-list"></ul>
           <div id="list-foot"></div>
         </div>
@@ -215,8 +234,11 @@ function renderHead() {
 function taskItem(t) {
   const project =
     state.view.type === "all" && t.project_id ? state.projects.find((p) => p.id === t.project_id) : null;
+  const checkLabel = t.is_done ? "Вернуть в работу" : "Отметить выполненной";
   return `
-    <li class="task" style="--prio: var(--p${t.priority})">
+    <li class="task ${t.is_done ? "done" : ""} ${isLeaving(t) ? "leaving" : ""}" style="--prio: var(--p${t.priority})">
+      <button class="check" data-action="toggle-done" data-id="${t.id}" role="checkbox"
+        aria-checked="${t.is_done}" aria-label="${checkLabel}" title="${checkLabel}">${icons.check}</button>
       <button class="task-main" data-action="edit-task" data-id="${t.id}">
         <span class="task-title">${esc(t.title)}</span>
         ${t.description ? `<span class="task-desc">${esc(t.description)}</span>` : ""}
@@ -236,7 +258,11 @@ function renderTasks() {
   const $list = $("#task-list");
   const $foot = $("#list-foot");
   if (!$list) return;
-  $list.classList.toggle("dim", state.loading && state.tasks.length > 0);
+  $list.classList.toggle("dim", state.loading && !state.quiet && state.tasks.length > 0);
+
+  // innerHTML пересоздаёт кнопки — запоминаем фокус, чтобы вернуть его после перерисовки.
+  const focused = document.activeElement?.closest?.("#task-list [data-action][data-id]");
+  const refocus = focused && `[data-action="${focused.dataset.action}"][data-id="${focused.dataset.id}"]`;
 
   if (state.error) {
     $list.innerHTML = "";
@@ -250,14 +276,22 @@ function renderTasks() {
       return;
     }
     $list.innerHTML = "";
-    const filtered = state.search.trim() || state.priority;
-    $foot.innerHTML = filtered
-      ? `<div class="empty"><p class="empty-title">Ничего не найдено</p><p class="muted">Попробуйте изменить поиск или фильтр.</p></div>`
-      : `<div class="empty"><p class="empty-title">Задач пока нет</p><p class="muted">Создайте первую — это займёт пару секунд.</p>
-           <button class="btn primary" data-action="new-task">${icons.plus}<span>Новая задача</span></button></div>`;
+    const newTaskBtn = `<button class="btn primary" data-action="new-task">${icons.plus}<span>Новая задача</span></button>`;
+    const empty = (title, text, extra = "") =>
+      `<div class="empty"><p class="empty-title">${title}</p><p class="muted">${text}</p>${extra}</div>`;
+    if (state.search.trim() || state.priority) {
+      $foot.innerHTML = empty("Ничего не найдено", "Попробуйте изменить поиск или фильтр.");
+    } else if (state.status === "active") {
+      $foot.innerHTML = empty("Активных задач нет", "Всё сделано — или самое время добавить новую.", newTaskBtn);
+    } else if (state.status === "done") {
+      $foot.innerHTML = empty("Выполненных задач пока нет", "Отметьте задачу кружком слева, и она появится здесь.");
+    } else {
+      $foot.innerHTML = empty("Задач пока нет", "Создайте первую — это займёт пару секунд.", newTaskBtn);
+    }
     return;
   }
   $list.innerHTML = state.tasks.map(taskItem).join("");
+  if (refocus) $list.querySelector(refocus)?.focus();
   $foot.innerHTML = state.hasMore
     ? `<button class="btn ghost wide" data-action="load-more" ${state.loading ? "disabled" : ""}>${state.loading ? "Загрузка…" : "Показать ещё"}</button>`
     : "";
@@ -272,6 +306,7 @@ async function loadTasks({ append = false, keep = false } = {}) {
   const seq = ++loadSeq;
   const size = keep ? Math.min(99, Math.max(PAGE_SIZE, state.tasks.length)) : PAGE_SIZE;
   state.loading = true;
+  state.quiet = keep;
   state.error = null;
   renderTasks();
   try {
@@ -281,6 +316,7 @@ async function loadTasks({ append = false, keep = false } = {}) {
       search: state.search.trim() || undefined,
       priority: state.priority || undefined,
       project_id: state.view.type === "project" ? state.view.id : undefined,
+      is_done: statusQuery(),
     });
     if (seq !== loadSeq) return;
     state.hasMore = page.length > size;
@@ -300,6 +336,45 @@ async function loadTasks({ append = false, keep = false } = {}) {
       renderTasks();
     }
   }
+}
+
+let pendingToggles = 0;
+let refreshTimer;
+
+async function toggleDone(task) {
+  const next = !task.is_done;
+  task.is_done = next; // оптимистично: отмечаем сразу, при ошибке откатываем
+  renderTasks();
+  pendingToggles++;
+  try {
+    Object.assign(task, await api.tasks.setDone(task.id, next));
+  } catch (err) {
+    task.is_done = !next;
+    if (err.status !== 401) toast(err.message);
+  } finally {
+    pendingToggles--;
+    renderTasks();
+    scheduleRefresh();
+  }
+}
+
+// Отмеченные задачи даём увидеть зачёркнутыми, затем перезагружаем список под текущий фильтр.
+function scheduleRefresh() {
+  if (state.status === "all" || !state.tasks.some(isLeaving)) return;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (pendingToggles === 0) loadTasks({ keep: true });
+  }, 900);
+}
+
+function setStatus(status) {
+  if (status === state.status) return;
+  state.status = status;
+  clearTimeout(refreshTimer);
+  for (const btn of $app.querySelectorAll("#status-tabs .tab")) {
+    btn.setAttribute("aria-pressed", String(btn.dataset.status === status));
+  }
+  loadTasks();
 }
 
 function parseHash() {
@@ -494,6 +569,10 @@ $app.addEventListener("click", async (e) => {
       return openTaskForm();
     case "edit-task":
       return task && openTaskForm(task);
+    case "toggle-done":
+      return task && toggleDone(task);
+    case "set-status":
+      return setStatus(el.dataset.status);
     case "delete-task": {
       if (!task) return;
       const ok = await confirmDialog({
@@ -542,7 +621,7 @@ $app.addEventListener("click", async (e) => {
       return layout?.classList.remove("sidebar-open");
     case "logout":
       await api.logout();
-      Object.assign(state, { projects: [], tasks: [], search: "", priority: "" });
+      Object.assign(state, { projects: [], tasks: [], search: "", priority: "", status: "active" });
       return renderAuth();
   }
 });

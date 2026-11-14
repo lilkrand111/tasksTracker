@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Path, Query
-from ..schemas import TaskCreate, TaskRead
+from ..schemas import TaskCreate, TaskRead, TaskIsDone
 from ..models import Task
 from ..deps import get_owned_project, get_owned_task
 from ..security import get_current_user_id
@@ -41,6 +41,7 @@ async def get_tasks(
     priority: Annotated[int | None, Query(ge=1, le=4)] = None,
     search: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
     project_id: int | None = None,
+    is_done: bool | None = None,
 ):
     stmt = select(Task).where(Task.user_id == current_id)
     if priority is not None:
@@ -50,6 +51,8 @@ async def get_tasks(
     if project_id is not None:
         await get_owned_project(session, project_id, current_id)
         stmt = stmt.where(Task.project_id == project_id)
+    if is_done is not None:
+        stmt = stmt.where(Task.is_done == is_done)
     stmt = stmt.order_by(Task.id).limit(limit).offset(offset)
     result = await session.execute(stmt)
     return result.scalars().all()
@@ -93,3 +96,17 @@ async def delete_task(
     task = await get_owned_task(session, task_id, current_id)
     await session.delete(task)
     await session.commit()
+
+
+@router.patch("/{task_id}/is_done", response_model=TaskRead)
+async def set_done(
+    task_id: Annotated[int, Path(ge=1)],
+    body: TaskIsDone,
+    session: AsyncSession = Depends(get_session),
+    current_id: int = Depends(get_current_user_id),
+):
+    task = await get_owned_task(session, task_id, current_id)
+    task.is_done = body.is_done
+    await session.commit()
+    await session.refresh(task)
+    return task

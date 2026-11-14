@@ -174,4 +174,5 @@ export const tasks = {
   create: (data) => request("POST", "/tasks", { body: data }),
   update: (id, data) => request("PUT", `/tasks/${id}`, { body: data }),
   remove: (id) => request("DELETE", `/tasks/${id}`),
+  setDone: (id, isDone) => request("PATCH", `/tasks/${id}/is_done`, { body: { is_done: isDone } }),
 };

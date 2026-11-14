@@ -10,6 +10,7 @@ class TaskCreate(BaseModel):
 
 class TaskRead(TaskCreate):
     id: int
+    is_done: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,3 +46,7 @@ class ProjectRead(ProjectCreate):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TaskIsDone(BaseModel):
+    is_done: bool

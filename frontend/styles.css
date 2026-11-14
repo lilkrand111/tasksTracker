@@ -517,7 +517,7 @@ textarea:focus {
   min-width: 0;
   display: grid;
   gap: 4px;
-  padding: 13px 8px 12px 18px;
+  padding: 13px 8px 12px 12px;
   border: 0;
   background: none;
   text-align: left;
@@ -526,6 +526,92 @@ textarea:focus {
 .task-title {
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+/* Круглый чекбокс выполнения, обводка — цвет приоритета */
+.check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 13px 0 0 18px;
+  padding: 0;
+  border: 2px solid var(--prio);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--prio) 8%, transparent);
+  color: var(--prio);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+.check svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3.5;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.check:hover svg {
+  opacity: 0.6;
+}
+.check:active {
+  transform: scale(0.88);
+}
+.check[aria-checked="true"] {
+  background: var(--prio);
+  color: #fff;
+}
+.check[aria-checked="true"] svg {
+  opacity: 1;
+}
+
+.task.done .task-title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+.task.done .task-desc,
+.task.done .task-meta {
+  opacity: 0.6;
+}
+.task.leaving {
+  animation: leaving 0.5s 0.3s ease forwards;
+}
+@keyframes leaving {
+  to {
+    opacity: 0.4;
+  }
+}
+
+.status-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  position: relative;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+.tab:hover,
+.tab[aria-pressed="true"] {
+  color: var(--text);
+}
+.tab[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 .task-desc {
   color: var(--muted);
