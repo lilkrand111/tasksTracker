@@ -5,6 +5,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     priority: int = Field(default=2, ge=1, le=4)
+    project_id: int | None = None
 
 
 class TaskRead(TaskCreate):
