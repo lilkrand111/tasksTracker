@@ -1,0 +1,3 @@
+# Фронтенд сгенерирован, не учитываем его в статистике языков GitHub
+frontend/* linguist-vendored
+frontend/js/* linguist-vendored
