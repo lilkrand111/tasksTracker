@@ -10,23 +10,26 @@ from sqlalchemy import delete
 from .database import SessionLocal
 from .models import RefreshToken
 
-
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
-logger = logging.getLogger('uvicorn.error')
+logger = logging.getLogger("uvicorn.error")
 
 
 async def cleanup_loop():
     while True:
         try:
             async with SessionLocal() as session:
-                result = await session.execute(delete(RefreshToken).where(RefreshToken.expires_at < datetime.now(timezone.utc)))
+                result = await session.execute(
+                    delete(RefreshToken).where(
+                        RefreshToken.expires_at < datetime.now(timezone.utc)
+                    )
+                )
                 await session.commit()
             logger.info("Удалено истёкших refresh-токенов: %d", result.rowcount)
         except Exception:
             logger.exception("Ошибка очистки refresh-токенов")
-        await asyncio.sleep(24*3600)
+        await asyncio.sleep(24 * 3600)
 
 
 @asynccontextmanager
