@@ -67,7 +67,7 @@ async def db_session():
 
 
 @pytest.fixture
-async def alice_headers(client):
+async def user1_headers(client):
     await client.post("/register", json={"login": "user1", "password": "secret123"})
     response = await client.post(
         "/token", data={"username": "user1", "password": "secret123"}
@@ -77,7 +77,7 @@ async def alice_headers(client):
 
 
 @pytest.fixture
-async def bob_headers(client):
+async def user2_headers(client):
     await client.post("/register", json={"login": "user2", "password": "secret321"})
     response = await client.post(
         "/token", data={"username": "user2", "password": "secret321"}
